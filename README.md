@@ -1,2 +1,2 @@
 # FightIQ
-Full-stack UFC/combat sports analytics platform
+FightIQ is a full-stack UFC/combat sports analytics platform that provides fighter profiles, matchup comparisons, and machine learning–based fight outcome predictions. It aggregates historical performance stats (striking, grappling, defense, activity, etc.) to generate win probabilities and method likelihoods, and includes an AI-powered “fight breakdown” feature that summarizes key advantages and win conditions for each fighter. Built with a scalable backend and structured data pipeline to support future ranking systems and automated data ingestion.
