@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey, DateTime, JSON, Index
 from sqlalchemy.orm import relationship
 from .database import Base
+from datetime import datetime, timezone
 
 class Fighter(Base):
     __tablename__ = "fighters"
@@ -51,3 +52,18 @@ class Fight(Base):
     method = Column(String)  # KO/TKO, Submission, Decision, etc.
     round = Column(Integer)
     event_name = Column(String)
+
+class MatchupCache(Base):
+    __tablename__ = "matchup_cache"
+
+    id = Column(Integer, primary_key=True, index=True)
+    fighter_a_id = Column(Integer, ForeignKey("fighters.id"))
+    fighter_b_id = Column(Integer, ForeignKey("fighters.id"))
+    prediction_data = Column(JSON)  # Store the full prediction
+    model_version = Column(String, default="v1_simple") # Which model we used to predict
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    
+    # Composite index for fast lookups
+    __table_args__ = (
+        Index('idx_matchup_lookup', 'fighter_a_id', 'fighter_b_id', 'model_version'),
+    )

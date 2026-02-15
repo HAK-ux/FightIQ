@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from . import models
 from typing import Dict, Tuple
 import math
+from datetime import datetime, timedelta, timezone
 
 class MatchupEngine():
     """
@@ -115,6 +116,32 @@ class MatchupEngine():
             "method": "simple_rule_based",
             "deltas": deltas
         }
+    
+    def _get_cached_prediction(self, fighter_a_id: int, fighter_b_id: int):
+        """Check if we have a recent cached prediction"""
+        cache_entry = self.db.query(models.MatchupCache).filter(
+            models.MatchupCache.fighter_a_id == fighter_a_id,
+            models.MatchupCache.fighter_b_id == fighter_b_id,
+            models.MatchupCache.model_version == "v1_simple"
+        ).first()
+        
+        if cache_entry:
+            # Cache is valid for 7 days
+            if datetime.now(timezone.utc) - cache_entry.created_at < timedelta(days=7):
+                return cache_entry.prediction_data
+        
+        return None
+    
+    def _cache_prediction(self, fighter_a_id: int, fighter_b_id: int, prediction: Dict):
+        """Store prediction in cache"""
+        cache_entry = models.MatchupCache(
+            fighter_a_id=fighter_a_id,
+            fighter_b_id=fighter_b_id,
+            prediction_data=prediction,
+            model_version="v1_simple"
+        )
+        self.db.add(cache_entry)
+        self.db.commit()
 
     def _sigmoid(self, x: float) -> float:
         """Sigmoid function to convert score to probability"""
