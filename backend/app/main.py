@@ -2,8 +2,10 @@ from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from . import models
+from .matchup import MatchupEngine
 from .database import engine, get_db
-from app.schemas import FightResponse, FighterResponse, FighterStatsResponse
+from app.schemas import (FightResponse, FighterResponse, FighterStatsResponse, 
+                        MatchupRequest, DeltasResponse, MatchupPredictionResponse)
 
 models.Base.metadata.create_all(bind=engine)
 app = FastAPI(title="FightIQ API", version="0.1.0")
@@ -85,3 +87,56 @@ def get_fighter_fights(fighter_id: int, db: Session = Depends(get_db)):
     ).order_by(models.Fight.fight_date.desc()).all()
     
     return fights
+
+@app.post("/matchup/predict")
+def predict_matchup(request: MatchupRequest, db: Session = Depends(get_db)):
+    """
+    Predict the outcome of a matchup between two fighters.
+    Returns win probabilities and key statisstical deltas.
+    """
+
+    engine = MatchupEngine(db)
+
+    try:
+        prediction = engine.predict_simple(request.fighter_a_id, request.fighter_b_id)
+
+        # Fetch fighter details for response
+        fighter_a = db.query(models.Fighter).filter(
+            models.Fighter.id == request.fighter_a_id
+        ).first()
+        fighter_b = db.query(models.Fighter).filter(
+            models.Fighter.id == request.fighter_b_id
+        ).first()
+
+        # Return prediction + fighters
+        return {
+            **prediction, "fighter_a": fighter_a, "fighter_b": fighter_b
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.get("/matchup/{fighter_a_id}/vs/{fighter_b_id}")
+def get_matchup_prediction(fighter_a_id: int, fighter_b_id: int, db: Session = Depends(get_db)):
+    """
+    Alternative GET endpoint for matchup prediction - direct URL access.
+    """
+    engine = MatchupEngine(db)
+    
+    try:
+        prediction = engine.predict_simple(fighter_a_id, fighter_b_id)
+        
+        fighter_a = db.query(models.Fighter).filter(
+            models.Fighter.id == fighter_a_id
+        ).first()
+        fighter_b = db.query(models.Fighter).filter(
+            models.Fighter.id == fighter_b_id
+        ).first()
+        
+        return {
+            **prediction,
+            "fighter_a": fighter_a,
+            "fighter_b": fighter_b
+        }
+    
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))

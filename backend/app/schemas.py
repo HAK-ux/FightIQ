@@ -41,4 +41,29 @@ class FightResponse(BaseModel):
     method: str
     round: int
     event_name: str
-    
+
+class MatchupRequest(BaseModel):
+    fighter_a_id: int
+    fighter_b_id: int
+
+class DeltasResponse(BaseModel):
+    reach_diff_cm: float
+    height_diff_cm: float
+    striking_output_diff: float
+    striking_defense_diff: float
+    striking_accuracy_diff: float
+    striking_absorbed_diff: float
+    takedown_offense_diff: float
+    takedown_defense_diff: float
+    takedown_accuracy_diff: float
+    win_percentage_diff: float
+    experience_diff: float
+
+class MatchupPredictionResponse(BaseModel):
+    fighter_a_win_probability: float
+    fighter_b_win_probability: float
+    confidence: str
+    method: str
+    deltas: DeltasResponse
+    fighter_a: FighterResponse
+    fighter_b: FighterResponse
