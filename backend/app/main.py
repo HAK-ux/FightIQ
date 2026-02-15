@@ -3,38 +3,10 @@ from sqlalchemy.orm import Session
 from typing import List
 from . import models
 from .database import engine, get_db
-from pydantic import BaseModel
+from app.schemas import FightResponse, FighterResponse, FighterStatsResponse
 
 models.Base.metadata.create_all(bind=engine)
 app = FastAPI(title="FightIQ API", version="0.1.0")
-
-class FighterStatsResponse(BaseModel):
-    sig_strikes_landed_per_min: float | None
-    sig_strikes_absorbed_per_min: float | None
-    striking_accuracy: float | None
-    striking_defense: float | None
-    takedown_avg_per_fight: float | None
-    takedown_accuracy: float | None
-    takedown_defense: float | None
-    
-    class Config:
-        from_attributes = True # can serialize this model instance
-
-class FighterResponse(BaseModel):
-    id: int
-    name: str
-    nickname: str | None
-    weight_class: str | None
-    wins: int
-    losses: int
-    draws: int
-    height_cm: float | None
-    reach_cm: float | None
-    stance: str | None
-    stats: FighterStatsResponse | None = None
-    
-    class Config:
-        from_attributes = True
 
 # Endpoints 
 @app.get("/health")
