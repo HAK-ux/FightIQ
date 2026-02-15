@@ -41,6 +41,19 @@ class FighterResponse(BaseModel):
 def health():
     return {"message": "FightIQ API v0.1", "status": "running"}
 
+@app.get("/fighters/search")
+def search_fighters(
+    q: str,
+    db: Session = Depends(get_db)
+):
+    """Search fighters by name or nickname"""
+    fighters = db.query(models.Fighter).filter(
+        (models.Fighter.name.ilike(f"%{q}%")) | 
+        (models.Fighter.nickname.ilike(f"%{q}%"))
+    ).limit(10).all()
+    
+    return fighters
+
 @app.get("/fighters", response_model=List[FighterResponse])
 def get_fighters(skip: int = 0, limit: int = 20, weight_class: str | None = None, db: Session = Depends(get_db)):
     query = db.query(models.Fighter)
@@ -72,3 +85,31 @@ def get_fighter_stats(fighter_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Stats not found")
     
     return stats
+
+@app.get("/weight-classes")
+def get_weight_classes(db: Session = Depends(get_db)):
+    """Get list of all weight classes in database"""
+    weight_classes = db.query(models.Fighter.weight_class).distinct().all()
+    return [wc[0] for wc in weight_classes if wc[0]]
+
+@app.get("/stats/summary")
+def get_stats_summary(db: Session = Depends(get_db)):
+    """Get overall database statistics"""
+    total_fighters = db.query(models.Fighter).count()
+    total_fights = db.query(models.Fight).count()
+    
+    return {
+        "total_fighters": total_fighters,
+        "total_fights": total_fights,
+        "weight_classes": db.query(models.Fighter.weight_class).distinct().count()
+    }
+
+@app.get("/fighters/{fighter_id}/fights", response_model=List[FightResponse])
+def get_fighter_fights(fighter_id: int, db: Session = Depends(get_db)):
+    """Get all fights for a specific fighter"""
+    fights = db.query(models.Fight).filter(
+        (models.Fight.fighter_a_id == fighter_id) |
+        (models.Fight.fighter_b_id == fighter_id)
+    ).order_by(models.Fight.fight_date.desc()).all()
+    
+    return fights
