@@ -1,0 +1,9 @@
+name,nickname,weight_class,wins,losses,draws,height_cm,reach_cm,stance,sig_strikes_landed_per_min,sig_strikes_absorbed_per_min,striking_accuracy,striking_defense,takedown_avg_per_fight,takedown_accuracy,takedown_defense,submission_avg_per_fight
+Jon Jones,Bones,Heavyweight,27,1,0,193,215,Orthodox,4.29,2.59,52,63,2.43,43,95,0.5
+Khabib Nurmagomedov,The Eagle,Lightweight,29,0,0,178,178,Orthodox,3.55,1.67,50,64,4.99,50,85,0.8
+Amanda Nunes,The Lioness,Bantamweight,23,5,0,173,178,Orthodox,5.88,3.98,46,57,1.46,42,79,0.5
+Francis Ngannou,The Predator,Heavyweight,17,3,0,193,211,Orthodox,5.00,3.31,51,52,0.63,60,93,0.0
+Valentina Shevchenko,Bullet,Flyweight,23,4,0,165,168,Southpaw,5.28,2.48,46,56,1.46,42,77,0.4
+Charles Oliveira,Do Bronx,Lightweight,34,10,0,178,188,Orthodox,4.81,4.35,45,51,2.17,47,58,2.1
+Kamaru Usman,The Nigerian Nightmare,Welterweight,20,3,0,183,193,Orthodox,5.05,3.34,51,58,3.56,50,81,0.0
+Max Holloway,Blessed,Featherweight,25,7,0,180,175,Orthodox,7.48,4.88,46,58,0.60,42,83,0.1
