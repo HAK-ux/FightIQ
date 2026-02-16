@@ -60,6 +60,9 @@ class MatchupCache(Base):
     fighter_a_id = Column(Integer, ForeignKey("fighters.id"))
     fighter_b_id = Column(Integer, ForeignKey("fighters.id"))
     prediction_data = Column(JSON)  # Store the full prediction
+    breakdown_text = Column(String)
+    fighter_a_win_condition = Column(String) 
+    fighter_b_win_condition = Column(String)  
     model_version = Column(String, default="v1_simple") # Which model we used to predict
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     

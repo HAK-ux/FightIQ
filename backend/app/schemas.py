@@ -67,3 +67,16 @@ class MatchupPredictionResponse(BaseModel):
     deltas: DeltasResponse
     fighter_a: FighterResponse
     fighter_b: FighterResponse
+
+class MatchupBreakdownResponse(BaseModel):
+    fighter_a_win_probability: float
+    fighter_b_win_probability: float
+    confidence: str
+    method: str
+    deltas: DeltasResponse
+    fighter_a: FighterResponse
+    fighter_b: FighterResponse
+    breakdown: str
+    fighter_a_win_condition: str
+    fighter_b_win_condition: str
+    from_cache: bool | None = None

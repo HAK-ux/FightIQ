@@ -5,7 +5,9 @@ from . import models
 from .matchup import MatchupEngine
 from .database import engine, get_db
 from app.schemas import (FightResponse, FighterResponse, FighterStatsResponse, 
-                        MatchupRequest, DeltasResponse, MatchupPredictionResponse)
+                        MatchupRequest, DeltasResponse, MatchupPredictionResponse,
+                        MatchupBreakdownResponse)
+from .ai_breakdown import AIBreakDownService
 
 models.Base.metadata.create_all(bind=engine)
 app = FastAPI(title="FightIQ API", version="0.1.0")
@@ -88,7 +90,7 @@ def get_fighter_fights(fighter_id: int, db: Session = Depends(get_db)):
     
     return fights
 
-@app.post("/matchup/predict")
+@app.post("/matchup/predict", response_model=MatchupPredictionResponse)
 def predict_matchup(request: MatchupRequest, db: Session = Depends(get_db)):
     """
     Predict the outcome of a matchup between two fighters.
@@ -108,6 +110,9 @@ def predict_matchup(request: MatchupRequest, db: Session = Depends(get_db)):
             models.Fighter.id == request.fighter_b_id
         ).first()
 
+        if not fighter_a or not fighter_b:
+            raise HTTPException(status_code=404, detail="Fighter not found")
+        
         # Return prediction + fighters
         return {
             **prediction, "fighter_a": fighter_a, "fighter_b": fighter_b
@@ -140,3 +145,153 @@ def get_matchup_prediction(fighter_a_id: int, fighter_b_id: int, db: Session = D
     
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    
+@app.post("/matchup/breakdown", response_model=MatchupBreakdownResponse)
+def get_matchup_breakdown(request: MatchupRequest, db: Session = Depends(get_db)):
+    """
+    Get a full fight breakdown with AI-generated analysis.
+    Checks cache first to avoid redundant AI calls.
+    """
+    engine = MatchupEngine(db)
+    
+    try:
+        # Check if we have a cached breakdown
+        cached_breakdown = engine._get_cached_breakdown(
+            request.fighter_a_id,
+            request.fighter_b_id
+        )
+        
+        if cached_breakdown:
+            # Fetch fighter details for response
+            fighter_a = db.query(models.Fighter).filter(
+                models.Fighter.id == request.fighter_a_id
+            ).first()
+            fighter_b = db.query(models.Fighter).filter(
+                models.Fighter.id == request.fighter_b_id
+            ).first()
+            
+            return {
+                **cached_breakdown,
+                "fighter_a": fighter_a,
+                "fighter_b": fighter_b,
+                "from_cache": True
+            }
+        
+        # No cache - generate fresh prediction
+        prediction = engine.predict_simple(
+            request.fighter_a_id,
+            request.fighter_b_id,
+            use_cache=True  # This caches the prediction part
+        )
+        
+        # Fetch fighter details
+        fighter_a = db.query(models.Fighter).filter(
+            models.Fighter.id == request.fighter_a_id
+        ).first()
+        fighter_b = db.query(models.Fighter).filter(
+            models.Fighter.id == request.fighter_b_id
+        ).first()
+        
+        # Generate AI breakdown (this is the expensive part)
+        ai_service = AIBreakDownService()
+        breakdown_text = ai_service.generate_breakdown(
+            fighter_a, fighter_b, prediction
+        )
+        
+        # Generate quick win conditions
+        win_conditions = ai_service.generate_quick_summary(
+            fighter_a, fighter_b, prediction
+        )
+        
+        # Cache the complete breakdown
+        engine._cache_breakdown(
+            request.fighter_a_id,
+            request.fighter_b_id,
+            prediction,
+            breakdown_text,
+            win_conditions
+        )
+        
+        return {
+            **prediction,
+            "fighter_a": fighter_a,
+            "fighter_b": fighter_b,
+            "breakdown": breakdown_text,
+            "fighter_a_win_condition": win_conditions["fighter_a_win_condition"],
+            "fighter_b_win_condition": win_conditions["fighter_b_win_condition"],
+            "from_cache": False
+        }
+    
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating breakdown: {str(e)}")
+
+
+@app.get("/matchup/{fighter_a_id}/vs/{fighter_b_id}/breakdown", response_model=MatchupBreakdownResponse)
+def get_matchup_breakdown_by_url(fighter_a_id: int, fighter_b_id: int, db: Session = Depends(get_db)):
+    """
+    GET version of breakdown endpoint with caching.
+    """
+    engine = MatchupEngine(db)
+    
+    try:
+        # Check cache first
+        cached_breakdown = engine._get_cached_breakdown(fighter_a_id, fighter_b_id)
+        
+        if cached_breakdown:
+            fighter_a = db.query(models.Fighter).filter(
+                models.Fighter.id == fighter_a_id
+            ).first()
+            fighter_b = db.query(models.Fighter).filter(
+                models.Fighter.id == fighter_b_id
+            ).first()
+            
+            return {
+                **cached_breakdown,
+                "fighter_a": fighter_a,
+                "fighter_b": fighter_b,
+                "from_cache": True
+            }
+        
+        # Generate fresh
+        prediction = engine.predict_simple(fighter_a_id, fighter_b_id)
+        
+        fighter_a = db.query(models.Fighter).filter(
+            models.Fighter.id == fighter_a_id
+        ).first()
+        fighter_b = db.query(models.Fighter).filter(
+            models.Fighter.id == fighter_b_id
+        ).first()
+        
+        ai_service = AIBreakDownService()
+        breakdown_text = ai_service.generate_breakdown(
+            fighter_a, fighter_b, prediction
+        )
+        
+        win_conditions = ai_service.generate_quick_summary(
+            fighter_a, fighter_b, prediction
+        )
+        
+        # Cache it
+        engine._cache_breakdown(
+            fighter_a_id,
+            fighter_b_id,
+            prediction,
+            breakdown_text,
+            win_conditions
+        )
+        
+        return {
+            **prediction,
+            "fighter_a": fighter_a,
+            "fighter_b": fighter_b,
+            "breakdown": breakdown_text,
+            **win_conditions,
+            "from_cache": False
+        }
+    
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating breakdown: {str(e)}")

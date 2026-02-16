@@ -64,10 +64,15 @@ class MatchupEngine():
         percentage = (fighter.wins + 0.5 * fighter.draws)/total_fights * 100
         return percentage 
     
-    def predict_simple(self, fighter_a_id: int, fighter_b_id: int) -> Dict:
+    def predict_simple(self, fighter_a_id: int, fighter_b_id: int,  use_cache: bool = True) -> Dict:
         """
         Simple rule-based prediction model, will improve later with ML
         """
+
+        if use_cache:
+            cached = self._get_cached_prediction(fighter_a_id, fighter_b_id)
+            if cached:
+                return cached
         deltas = self.compute_deltas(fighter_a_id, fighter_b_id)
 
         # Weighted scoring system
@@ -109,13 +114,17 @@ class MatchupEngine():
         fighter_a_prob = self._sigmoid(score / 10)  # Normalize (b/w 0 and 1)
         fighter_b_prob = 1 - fighter_a_prob
         
-        return {
+        result = {
             "fighter_a_win_probability": round(fighter_a_prob, 3),
             "fighter_b_win_probability": round(fighter_b_prob, 3),
             "confidence": self._calculate_confidence(fighter_a_prob),
             "method": "simple_rule_based",
             "deltas": deltas
         }
+        if use_cache:
+            self._cache_prediction(fighter_a_id, fighter_b_id, result)
+
+        return result
     
     def _get_cached_prediction(self, fighter_a_id: int, fighter_b_id: int):
         """Check if we have a recent cached prediction"""
@@ -126,21 +135,39 @@ class MatchupEngine():
         ).first()
         
         if cache_entry:
+            # Use timezone-aware datetime
+            now = datetime.now(timezone.utc)
+            created_at = cache_entry.created_at
+            
+            # Make created_at timezone-aware if it isn't
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            
             # Cache is valid for 7 days
-            if datetime.now(timezone.utc) - cache_entry.created_at < timedelta(days=7):
+            if now - created_at < timedelta(days=7):
                 return cache_entry.prediction_data
         
         return None
     
     def _cache_prediction(self, fighter_a_id: int, fighter_b_id: int, prediction: Dict):
-        """Store prediction in cache"""
-        cache_entry = models.MatchupCache(
-            fighter_a_id=fighter_a_id,
-            fighter_b_id=fighter_b_id,
-            prediction_data=prediction,
-            model_version="v1_simple"
-        )
-        self.db.add(cache_entry)
+        existing = self.db.query(models.MatchupCache).filter(
+            models.MatchupCache.fighter_a_id == fighter_a_id,
+            models.MatchupCache.fighter_b_id == fighter_b_id,
+            models.MatchupCache.model_version == "v1_simple"
+        ).first()
+
+        if existing:
+            existing.prediction_data = prediction
+            existing.created_at = datetime.now(timezone.utc)
+        else:
+            self.db.add(models.MatchupCache(
+                fighter_a_id=fighter_a_id,
+                fighter_b_id=fighter_b_id,
+                prediction_data=prediction,
+                model_version="v1_simple",
+                created_at=datetime.now(timezone.utc)
+            ))
+
         self.db.commit()
 
     def _sigmoid(self, x: float) -> float:
@@ -156,3 +183,80 @@ class MatchupEngine():
             return "medium"
         else:
             return "low"
+    
+    def predict_with_breakdown(self, fighter_a_id: int, fighter_b_id: int, use_cache: bool = True) -> Dict:
+        """
+        Generate prediction with cached breakdown if available.
+        """
+        if use_cache:
+            cached = self._get_cached_breakdown(fighter_a_id, fighter_b_id)
+            if cached:
+                return cached
+        
+        # Generate fresh prediction
+        prediction = self.predict_simple(fighter_a_id, fighter_b_id, use_cache=False)
+        
+        return prediction
+
+    def _get_cached_breakdown(self, fighter_a_id: int, fighter_b_id: int):
+        """Check cache for complete breakdown including AI text"""
+        
+        cache_entry = self.db.query(models.MatchupCache).filter(
+            models.MatchupCache.fighter_a_id == fighter_a_id,
+            models.MatchupCache.fighter_b_id == fighter_b_id,
+            models.MatchupCache.model_version == "v1_simple",
+            models.MatchupCache.breakdown_text.isnot(None)
+        ).first()
+        
+        if cache_entry:
+            # Use timezone-aware datetime
+            now = datetime.now(timezone.utc)
+            created_at = cache_entry.created_at
+            
+            # Make created_at timezone-aware if it isn't
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            
+            # Cache valid for 7 days
+            if now - created_at < timedelta(days=7):
+                return {
+                    **cache_entry.prediction_data,
+                    "breakdown": cache_entry.breakdown_text,
+                    "fighter_a_win_condition": cache_entry.fighter_a_win_condition,
+                    "fighter_b_win_condition": cache_entry.fighter_b_win_condition
+                }
+        
+        return None
+
+    def _cache_breakdown(self, fighter_a_id: int, 
+                         fighter_b_id: int, prediction: Dict, breakdown: str,win_conditions: Dict):
+        """Store prediction + AI breakdown + win conditions"""
+        
+        existing = self.db.query(models.MatchupCache).filter(
+            models.MatchupCache.fighter_a_id == fighter_a_id,
+            models.MatchupCache.fighter_b_id == fighter_b_id,
+            models.MatchupCache.model_version == "v1_simple"
+        ).first()
+        
+        if existing:
+            # Update existing cache
+            existing.breakdown_text = breakdown
+            existing.prediction_data = prediction
+            existing.fighter_a_win_condition = win_conditions["fighter_a_win_condition"]
+            existing.fighter_b_win_condition = win_conditions["fighter_b_win_condition"]
+            existing.created_at = datetime.now(timezone.utc)
+        else:
+            # Create new cache entry
+            cache_entry = models.MatchupCache(
+                fighter_a_id=fighter_a_id,
+                fighter_b_id=fighter_b_id,
+                prediction_data=prediction,
+                breakdown_text=breakdown,
+                fighter_a_win_condition=win_conditions["fighter_a_win_condition"],
+                fighter_b_win_condition=win_conditions["fighter_b_win_condition"],
+                model_version="v1_simple",
+                created_at=datetime.now(timezone.utc)
+            )
+            self.db.add(cache_entry)
+        
+        self.db.commit()
