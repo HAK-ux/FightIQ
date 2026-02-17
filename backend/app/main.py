@@ -304,3 +304,21 @@ def get_matchup_breakdown_by_url(fighter_a_id: int, fighter_b_id: int, db: Sessi
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating breakdown: {str(e)}")
+    
+@app.get("/model/info")
+def get_model_info():
+    """Returns info about the currently loaded prediction model."""
+    import joblib, os
+    model_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'fight_predictor.joblib')
+    
+    if not os.path.exists(model_path):
+        return {"status": "rule_based_fallback", "model": None}
+    
+    model_data = joblib.load(model_path)
+    return {
+        "status": "ml_model_loaded",
+        "model_name": model_data["model_name"],
+        "version": model_data["version"],
+        "auc_score": model_data["auc_score"],
+        "features": model_data["feature_columns"]
+    }
