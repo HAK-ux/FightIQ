@@ -16,6 +16,8 @@ class Fighter(Base):
     height_cm = Column(Float)
     reach_cm = Column(Float)
     stance = Column(String)
+    status = Column(String, default="active")
+    last_fight_date = Column(Date, nullable=True)
 
     # Relationship to stats
     stats = relationship("FighterStats", back_populates="fighter", uselist=False)
