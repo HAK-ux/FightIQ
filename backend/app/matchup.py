@@ -222,9 +222,13 @@ class MatchupEngine():
 
     def _get_cached_prediction(self, fighter_a_id: int, fighter_b_id: int):
         """Check if we have a recent cached prediction"""
+        # Normalize order: smaller ID always first
+        min_id = min(fighter_a_id, fighter_b_id)
+        max_id = max(fighter_a_id, fighter_b_id)
+
         cache_entry = self.db.query(models.MatchupCache).filter(
-            models.MatchupCache.fighter_a_id == fighter_a_id,
-            models.MatchupCache.fighter_b_id == fighter_b_id,
+            models.MatchupCache.fighter_a_id == min_id,
+            models.MatchupCache.fighter_b_id == max_id,
             models.MatchupCache.model_version == "v2_ml"
         ).first()
 
