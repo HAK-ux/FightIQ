@@ -27,6 +27,8 @@ class FighterResponse(BaseModel):
     height_cm: float | None
     reach_cm: float | None
     stance: str | None
+    status: str | None              
+    last_fight_date: str | None     
     stats: FighterStatsResponse | None = None
     
 

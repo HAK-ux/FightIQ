@@ -214,21 +214,39 @@ class UFCStatsScraper:
         UFCStats lists fights in reverse chronological order so first row = latest.
         """
         rows = soup.select("table.b-fight-details__table tbody tr")
+        
         for row in rows:
-            cols = row.select("td")
-            if len(cols) < 9:
-                continue
-
-            date_text = cols[-1].text.strip()
-
-            try:
-                return datetime.strptime(date_text, "%b. %d, %Y").date()
-            except ValueError:
-                try:
-                    return datetime.strptime(date_text, "%b %d, %Y").date()
-                except ValueError:
+            # Look for <p class="b-fight-details__table-text"> elements
+            date_elements = row.select("p.b-fight-details__table-text")
+            
+            for elem in date_elements:
+                text = elem.get_text(strip=True)
+                
+                # Skip empty or very short text
+                if not text or len(text) < 8:
                     continue
-
+                
+                # Check if it contains a month name (indicates it's a date)
+                if not any(month in text for month in ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                                                        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']):
+                    continue
+                
+                # Try parsing the date
+                try:
+                    return datetime.strptime(text, "%b. %d, %Y").date()
+                except ValueError:
+                    try:
+                        return datetime.strptime(text, "%b %d, %Y").date()
+                    except ValueError:
+                        try:
+                            # Try without period
+                            cleaned = text.replace('.', ' ').strip()
+                            # Handle multiple spaces
+                            cleaned = ' '.join(cleaned.split())
+                            return datetime.strptime(cleaned, "%b %d, %Y").date()
+                        except ValueError:
+                            continue
+        
         return None
 
     def _derive_status(self, last_fight_date: date) -> str:

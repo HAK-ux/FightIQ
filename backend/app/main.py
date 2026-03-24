@@ -9,6 +9,7 @@ from app.schemas import (FightResponse, FighterResponse, FighterStatsResponse,
                         MatchupRequest, DeltasResponse, MatchupPredictionResponse,
                         MatchupBreakdownResponse)
 from .ai_breakdown import AIBreakDownService
+from .pipeline.ingestion import DataIngestionService
 
 models.Base.metadata.create_all(bind=engine)
 app = FastAPI(title="FightIQ API", version="0.1.0")
@@ -321,4 +322,76 @@ def get_model_info():
         "version": model_data["version"],
         "auc_score": model_data["auc_score"],
         "features": model_data["feature_columns"]
+    }
+
+# ========================================
+# PIPELINE ENDPOINTS
+# ========================================
+
+@app.post("/pipeline/update-fighter")
+def update_fighter_endpoint(name: str, db: Session = Depends(get_db)):
+    """
+    Update a single fighter's stats from UFCStats.
+    Example: POST /pipeline/update-fighter?name=Jon%20Jones
+    """
+    service = DataIngestionService(db)
+    result = service.update_fighter(name)
+    
+    if result["status"] == "not_found":
+        raise HTTPException(status_code=404, detail=f"Fighter '{name}' not in database")
+    elif result["status"] == "scrape_failed":
+        raise HTTPException(status_code=404, detail=f"Could not find '{name}' on UFCStats")
+    
+    return result
+
+
+@app.post("/pipeline/update-after-event")
+def update_after_event_endpoint(
+    event_query: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Update all fighters who appeared in a specific event.
+    Run this after each UFC event weekend.
+    
+    Example: POST /pipeline/update-after-event?event_query=UFC%20314
+    Or: POST /pipeline/update-after-event?event_query=314
+    """
+    service = DataIngestionService(db)
+    results = service.update_after_event(event_query)
+    
+    if "error" in results:
+        raise HTTPException(status_code=404, detail=results["error"])
+    
+    return {
+        "status": "success",
+        "event": results["event"],
+        "fighters_updated": len(results["fighters_updated"]),
+        "fighters_not_found": len(results["fighters_not_found"]),
+        "details": results
+    }
+
+
+@app.post("/pipeline/update-recent-events")
+def update_recent_events_endpoint(
+    limit: int = 1,
+    db: Session = Depends(get_db)
+):
+    """
+    Update fighters from the N most recent UFC events.
+    Use for weekly/monthly bulk updates.
+    
+    Example: POST /pipeline/update-recent-events?limit=2
+    """
+    service = DataIngestionService(db)
+    results = service.update_recent_events(limit=limit)
+    
+    if "error" in results:
+        raise HTTPException(status_code=500, detail=results["error"])
+    
+    return {
+        "status": "success",
+        "events_synced": len(results["events_synced"]),
+        "total_fighters_updated": results["total_fighters_updated"],
+        "details": results
     }
